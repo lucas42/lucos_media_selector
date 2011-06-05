@@ -108,7 +108,8 @@ while($client = $server->accept()) {
 					<script type="text/javascript" src="/edit.js" />
 					<link rel="stylesheet" href="/edit.css" type="text/css" />
 				</head>
-				<body>';
+				<body>
+					<div>';
 				my $trackid = encode_entities($params{'id'}, '\'<>&"');
 				print $client "<table data-trackid='".$trackid."'>";
 				print $client "<tr><th>Label</th><th>Value</th><th>Source</th></tr>\n";
@@ -121,7 +122,7 @@ while($client = $server->accept()) {
 					print $client "<tr data-tagid='".$tag_id."'><td class='label'>".$label."</td><td class='value'>".$value."</td><td class='source'>".$source."</td></tr>\n";
 				}
 				print $client "</table>";
-				print $client "</body></html>";
+				print $client "</div></body></html>";
 			} else {
 				print $client "HTTP/1.1 404 Not Found\n";
 				print $client "Content-type: text/plain\n";
@@ -140,11 +141,20 @@ while($client = $server->accept()) {
 						my @track = $dbh->selectrow_array('SELECT 1 FROM track WHERE id = ?', { Slice => {} }, $params{'trackid'} );
 						$output->{'track'} = $track[0];
 						if ($track[0]) {
-							my @tag = $dbh->selectrow_array('SELECT id FROM tag WHERE label = ?', { Slice => {} }, $params{'tag'} );
+							my @tag = $dbh->selectrow_array('SELECT id, function FROM tag WHERE label = ?', { Slice => {} }, $params{'tag'} );
 							$tagid = $tag[0];
+							$function = $tag[1];
 							if (!$tagid) {
 								$dbh->do('INSERT INTO tag (label) VALUES (?)', undef, $params{'tag'} );
 								$tagid = $dbh->last_insert_id(undef, undef, 'tag', 'id');
+							} else {
+								given ($function) {
+									when ("multiply") {
+										if ($params{'value'} !~ m/^\d+(\.\d+)?$/) {
+											$output->{'error'} = ucfirst($params{'tag'})." should be a number";
+										}
+									}
+								}
 							}
 							$output->{'tagid'} = $tagid;
 							$source = 'manual';
