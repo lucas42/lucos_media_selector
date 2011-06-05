@@ -1,0 +1,30 @@
+body {
+	width: 600px;
+	background: #fca;
+	margin: 0 auto;
+}
+
+@media (min-width: 700px) {
+	table {
+		margin: 0 auto;
+	}
+}
+button {
+	float: right;
+}
+.error {
+	background: #fcc;
+	color: #900;
+	border: solid;
+	display: block;
+	padding-left: 1em;
+}
+.errorclose {
+	float: right;
+	color: #999;
+	cursor: pointer;
+	padding: 0 0.5em;
+}
+.errorclose:hover {
+	color: #555;
+}
