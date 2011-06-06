@@ -1,7 +1,13 @@
 body {
 	width: 600px;
-	background: #fca;
+	background: #999;
 	margin: 0 auto;
+}
+body.track {
+	background: #fca;
+}
+body.tag {
+	background: #acf;
 }
 
 @media (min-width: 700px) {

@@ -50,7 +50,7 @@
 		$.loadApi('update', params, function(data) {
 			source.empty().text(data.source);
 			row.data('tagid', data.tagid);
-			row.blur();
+			row.find("input").blur();
 		});
 	}
 	$.fn.setOrigText = function () {

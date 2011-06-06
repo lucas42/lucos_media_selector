@@ -7,6 +7,7 @@ use IO::String;
 use JSON::XS;
 use HTML::Entities;
 use URI::Escape;
+use GD;
 use 5.010;
 local($/) = LF;
 my $server = new IO::Socket::INET (
@@ -16,7 +17,7 @@ my $server = new IO::Socket::INET (
 									Reuse => 1,
 								);
 die "Could not create serveret: $!\n" unless $server;
-$coder = JSON::XS->new->utf8->pretty->allow_nonref;
+$coder = JSON::XS->new->pretty->allow_nonref;
 while($client = $server->accept()) {
    $client->autoflush(1);
 	my $path;
@@ -30,13 +31,13 @@ while($client = $server->accept()) {
 	}
 	if ($path eq "/playlist") {
 		print $client "HTTP/1.1 200 Found\n";
-		print $client "Content-type: application/xml\n";
+		print $client "Content-type: application/xml\n\n";
 		print "Playlist Requested\n";
 		
 		my $xml = '';
 		my $output = IO::String->new($xml);
 		my $writer = XML::Writer->new(OUTPUT => $output, DATA_MODE => 1, DATA_INDENT => 2);
-		$writer->xmlDecl();
+		$writer->xmlDecl('UTF-8');
 		$writer->startTag('playlist');
 
 		$dbh = DBI->connect( "dbi:SQLite:dbname=../db/media.sqlite","", "", { RaiseError => 1, AutoCommit => 0 });
@@ -68,7 +69,7 @@ while($client = $server->accept()) {
 		print $client "Location: /playlist\n";
 		print $client "\n";
 		print "Redirect: $path\n";
-	} elsif ($path =~ m~^/(api/([^\?]+)|edit)(\?(.*))?$~) {
+	} elsif ($path =~ m~^/(api|edit)/([^\?]+?)/?(\?(.*))?$~) {
 		$page = $1;
 		my $method = $2;
 		my %params = ();
@@ -87,48 +88,99 @@ while($client = $server->accept()) {
 			
 		}
 		if ($page eq "edit") {
-			if ($params{'id'}) {
-				print $client "HTTP/1.1 200 Found\n";
-				print $client "Content-type: application/xhtml+xml\n";
-				print $client "\n";
-				
-				$dbh = DBI->connect( "dbi:SQLite:dbname=../db/media.sqlite","", "", { RaiseError => 1, AutoCommit => 0 });
-				my $tags = $dbh->selectall_arrayref('SELECT label, value, source, tag_id FROM track_tags LEFT JOIN tag ON tag_id = id WHERE track_id = ?', { Slice => {} }, $params{'id'} );
-				$dbh->disconnect;
-				
-				print $client '<?xml version="1.0" encoding="UTF-8"?> 
-			<!DOCTYPE HTML> 
-			<html xmlns="http://www.w3.org/1999/xhtml"> 
-				<head> 
-					<title>LucOs - Edit Track Metadata</title> 
-					<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.0/jquery.min.js"></script> 
-					<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.9/jquery-ui.min.js"></script> 
-					<link rel="stylesheet" href="http://ajax.aspnetcdn.com/ajax/jquery.ui/1.8.9/themes/dot-luv/jquery-ui.css" type="text/css" />
-					<script type="text/javascript" src="/api.js" />
-					<script type="text/javascript" src="/edit.js" />
-					<link rel="stylesheet" href="/edit.css" type="text/css" />
-				</head>
-				<body>
-					<div>';
-				my $trackid = encode_entities($params{'id'}, '\'<>&"');
-				print $client "<table data-trackid='".$trackid."'>";
-				print $client "<tr><th>Label</th><th>Value</th><th>Source</th></tr>\n";
-				print $client "<tr class='static'><td>track_id</td><td>".$trackid."</td><td></td></tr>\n";
-				foreach my $tag ( @$tags ) {
-					$label = encode_entities($tag->{label}, '\'<>&"');
-					$tag_id = encode_entities($tag->{tag_id}, '\'<>&"');
-					$value = encode_entities($tag->{value}, '\'<>&"');
-					$source = encode_entities($tag->{source}, '\'<>&"');
-					print $client "<tr data-tagid='".$tag_id."'><td class='label'>".$label."</td><td class='value'>".$value."</td><td class='source'>".$source."</td></tr>\n";
+			given ($method) {
+				when ("track") {
+					if ($params{'id'}) {
+						print $client "HTTP/1.1 200 Found\n";
+						print $client "Content-type: application/xhtml+xml\n";
+						print $client "\n";
+						
+						$dbh = DBI->connect( "dbi:SQLite:dbname=../db/media.sqlite","", "", { RaiseError => 1, AutoCommit => 0 });
+						my $tags = $dbh->selectall_arrayref('SELECT label, value, source, tag_id FROM track_tags LEFT JOIN tag ON tag_id = id WHERE track_id = ?', { Slice => {} }, $params{'id'} );
+						$dbh->disconnect;
+						
+						print $client '<?xml version="1.0" encoding="UTF-8"?> 
+					<!DOCTYPE HTML> 
+					<html xmlns="http://www.w3.org/1999/xhtml"> 
+						<head> 
+							<title>LucOs - Edit Track Metadata</title> 
+							<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.0/jquery.min.js"></script> 
+							<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.9/jquery-ui.min.js"></script> 
+							<link rel="stylesheet" href="http://ajax.aspnetcdn.com/ajax/jquery.ui/1.8.9/themes/dot-luv/jquery-ui.css" type="text/css" />
+							<!--
+							<script src="/glow/1.7.5/core/core.js" type="text/javascript"></script>
+							<script src="/glow/1.7.5/widgets/widgets.js" type="text/javascript"></script>
+							<link href="/glow/1.7.5/widgets/widgets.css" type="text/css" rel="stylesheet" />-->
+							<script type="text/javascript" src="/api.js" />
+							<script type="text/javascript" src="/track.js" />
+							<link rel="stylesheet" href="/edit.css" type="text/css" />
+						</head>
+						<body class="track">
+							<div>';
+						my $trackid = encode_entities($params{'id'}, '\'<>&"');
+						print $client "<table data-trackid='".$trackid."'>";
+						print $client "<tr><th>Label</th><th>Value</th><th>Source</th></tr>\n";
+						foreach my $tag ( @$tags ) {
+							$label = encode_entities($tag->{label}, '\'<>&"');
+							$tag_id = encode_entities($tag->{tag_id}, '\'<>&"');
+							$value = encode_entities($tag->{value}, '\'<>&"');
+							$source = encode_entities($tag->{source}, '\'<>&"');
+							print $client "<tr data-tagid='".$tag_id."'><td class='label'>".$label."</td><td class='value'>".$value."</td><td class='source'>".$source."</td></tr>\n";
+						}
+						print $client "</table>";
+						print $client "</div></body></html>";
+					} else {
+						print $client "HTTP/1.1 404 Not Found\n";
+						print $client "Content-type: text/plain\n";
+						print $client "\n";
+						print $client "Need an id\n";
+						
+					}
 				}
-				print $client "</table>";
-				print $client "</div></body></html>";
-			} else {
-				print $client "HTTP/1.1 404 Not Found\n";
-				print $client "Content-type: text/plain\n";
-				print $client "\n";
-				print $client "Need an id\n";
-				
+				when ("tag") {
+					print $client "HTTP/1.1 200 Found\n";
+					print $client "Content-type: application/xhtml+xml\n";
+					print $client "\n";
+					
+					$dbh = DBI->connect( "dbi:SQLite:dbname=../db/media.sqlite","", "", { RaiseError => 1, AutoCommit => 0 });
+					my $tags = $dbh->selectall_arrayref('SELECT id, label, function FROM tag', { Slice => {} });
+					$dbh->disconnect;
+						
+					print $client '<?xml version="1.0" encoding="UTF-8"?> 
+				<!DOCTYPE HTML> 
+				<html xmlns="http://www.w3.org/1999/xhtml"> 
+					<head> 
+						<title>LucOs - Edit Track Metadata</title> 
+						<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.0/jquery.min.js"></script> 
+						<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.9/jquery-ui.min.js"></script> 
+						<link rel="stylesheet" href="http://ajax.aspnetcdn.com/ajax/jquery.ui/1.8.9/themes/dot-luv/jquery-ui.css" type="text/css" />
+						<!--
+						<script src="/glow/1.7.5/core/core.js" type="text/javascript"></script>
+						<script src="/glow/1.7.5/widgets/widgets.js" type="text/javascript"></script>
+						<link href="/glow/1.7.5/widgets/widgets.css" type="text/css" rel="stylesheet" />-->
+						<script type="text/javascript" src="/api.js" />
+						<script type="text/javascript" src="/tag.js" />
+						<link rel="stylesheet" href="/edit.css" type="text/css" />
+					</head>
+					<body class="tag">
+						<div>';
+						print $client "<table data-trackid='".$trackid."'>";
+						print $client "<tr><th/><th>Tag</th><th>Function</th></tr>\n";
+						foreach my $tag ( @$tags ) {
+							$label = encode_entities($tag->{label}, '\'<>&"');
+							$tag_id = encode_entities($tag->{id}, '\'<>&"');
+							$function = encode_entities($tag->{function}, '\'<>&"');
+							print $client "<tr data-tagid='".$tag_id."'><td class='id'>".$tag_id.". </td><td class='label'>".$label."</td><td class='function'>".$function."</td></tr>\n";
+						}
+						print $client "</table>";
+						print $client "</div></body></html>";
+				}
+				default {
+					print $client "HTTP/1.1 404 Not Found\n";
+					print $client "Content-type: text/plain\n";
+					print $client "\n";
+					print $client "Not Found (/edit)\n";
+				}
 			}
 			
 		} else {
@@ -170,6 +222,17 @@ while($client = $server->accept()) {
 				when ("tags") {
 					$output->{'tags'} = $dbh->selectcol_arrayref("SELECT label FROM tag");
 				}
+				when ("deletetag") {
+					#DELETE FROM track_tags WHERE tag_id = ?;
+					#DELETE FROM tag WHERE id = ?;
+					#DELETE from sqlite_sequence where name = 'tag';
+				}
+				when ("mergetags") {
+					#UPDATE track_tags SET tag_id = ? WHERE tag_id = ?;
+					#DELETE FROM tag WHERE id = ?;
+					#DELETE from sqlite_sequence where name = 'tag';
+
+				}
 				default {
 					$output->{'error'} = "API method not found";
 					$output->{'method'} = $method;
@@ -186,6 +249,28 @@ while($client = $server->accept()) {
 			print $client "Content-type: application/json\n";
 			print $client "\n";
 			print $client encode_json $output;
+		}
+	} elsif ($path =~ m~^/img/track/(\d+)$~) {
+		my $trackid = $1;
+		$dbh = DBI->connect( "dbi:SQLite:dbname=../db/media.sqlite","", "", { RaiseError => 1, AutoCommit => 0 });
+        my $sth = $dbh->prepare('SELECT img FROM track_img WHERE track_id = ?');
+        $sth->execute($trackid);
+        my @data = $sth->fetchrow_array();
+        $img = $data[0];
+		$dbh->disconnect;
+		#my @row = $dbh->selectall_arrayref('SELECT img FROM track_img WHERE track_id = ?', { Slice => {} }, $trackid );
+		#$img = $row[0][0];
+		if ($img) {
+			print $client "HTTP/1.1 200 Found\n";
+			print $client "Content-type: text\n";
+			print $client "\n";
+			print $client $img;
+			
+		} else {
+			print $client "HTTP/1.1 404 Not Found\n";
+			print $client "\n";
+			print $client "Can't find image for track $trackid\n";
+			
 		}
 	} else {
 		$path =~ s/\.\.//g;
@@ -223,6 +308,7 @@ while($client = $server->accept()) {
 		} else {
 			print $client "HTTP/1.1 404 Not Found\n";
 			print $client "\n";
+			print $client "Not Found\n";
 			print "Not found: $path\n";
 		}
 	}
