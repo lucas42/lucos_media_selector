@@ -19,13 +19,15 @@
 	});
 
 	function addRow() {
+			var id = $("<td />").addClass("id");
 			var label = $("<td />").addClass("label").each(makeInput);
 			var func = $("<td />").addClass("function").each(makeInput);
-			$("<tr />").append(label).append(func).appendTo("table");
+			$("<tr />").append(id).append(label).append(func).appendTo("table");
 			label.children("input").focus();
 	}
 	
 	function saveRow() {
+		return alert("Not yet implemented");
 		$.hideErrors();
 		var row = $(this).parents("tr");
 		var label = row.find('.label input');

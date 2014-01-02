@@ -1,4 +1,5 @@
 #!/usr/bin/perl
+no  warnings "experimental";
 use DBI;
 use XML::Simple;
 use XML::Writer;
@@ -7,16 +8,18 @@ use IO::String;
 use JSON::XS;
 use HTML::Entities;
 use URI::Escape;
-use GD;
 use 5.010;
 local($/) = LF;
+my $port = '8002';
+$| = 1; # Make sure stdout isn't buffered, so output gets seen by service module
 my $server = new IO::Socket::INET (
-									LocalPort => '8002',
+									LocalPort => $port,
 									Proto => 'tcp',
 									Listen => 1,
 									Reuse => 1,
 								);
 die "Could not create serveret: $!\n" unless $server;
+print "Server running on port $port\n";
 $coder = JSON::XS->new->pretty->allow_nonref;
 while($client = $server->accept()) {
    $client->autoflush(1);
@@ -32,7 +35,6 @@ while($client = $server->accept()) {
 	if ($path eq "/playlist") {
 		print $client "HTTP/1.1 200 Found\n";
 		print $client "Content-type: application/xml\n\n";
-		print "Playlist Requested\n";
 		
 		my $xml = '';
 		my $output = IO::String->new($xml);
@@ -68,7 +70,6 @@ while($client = $server->accept()) {
 		print $client "HTTP/1.1 301 Redirect\n";
 		print $client "Location: /playlist\n";
 		print $client "\n";
-		print "Redirect: $path\n";
 	} elsif ($path =~ m~^/(api|edit)/([^\?]+?)/?(\?(.*))?$~) {
 		$page = $1;
 		my $method = $2;
@@ -97,6 +98,7 @@ while($client = $server->accept()) {
 						
 						$dbh = DBI->connect( "dbi:SQLite:dbname=../db/media.sqlite","", "", { RaiseError => 1, AutoCommit => 0 });
 						my $tags = $dbh->selectall_arrayref('SELECT label, value, source, tag_id FROM track_tags LEFT JOIN tag ON tag_id = id WHERE track_id = ?', { Slice => {} }, $params{'id'} );
+						my $lists = $dbh->selectall_arrayref('SELECT label, value, tag_id FROM track_tags LEFT JOIN tag ON tag_id = id WHERE function = ?', { Slice => {} }, 'list' );
 						$dbh->disconnect;
 						
 						print $client '<?xml version="1.0" encoding="UTF-8"?> 
@@ -128,7 +130,19 @@ while($client = $server->accept()) {
 							print $client "<tr data-tagid='".$tag_id."'><td class='label'>".$label."</td><td class='value'>".$value."</td><td class='source'>".$source."</td></tr>\n";
 						}
 						print $client "</table>";
-						print $client "</div></body></html>";
+						print $client "</div><div><select multiple='multiple' id='lists'>";
+						foreach my $list ( @$lists ) {
+							$label = encode_entities($tag->{label}, '\'<>&"');
+							$tag_id = encode_entities($tag->{tag_id}, '\'<>&"');
+							$value = encode_entities($tag->{value}, '\'<>&"');
+							if ($tag->{value} > 0) {
+								$selected = ' selected="selected"';
+							} else {
+								$selected = '';
+							}
+							print $client "<option value='".$tag_id."'".$selected.">".$label."</option>";
+						}
+						print $client "</select></div><a href='/edit/tag'>Edit Tags</a></body></html>";
 					} else {
 						print $client "HTTP/1.1 404 Not Found\n";
 						print $client "Content-type: text/plain\n";
@@ -219,6 +233,24 @@ while($client = $server->accept()) {
 						$output->{'error'} = "incorrect params - trackid, tag and value are requried";
 					}
 				}
+				when ("edittag") {
+					if ($params{'label'} or $params{'id'}) {
+					#	if ($params{'value'} ~ m/^\d+(\.\d+)?$/) {
+					#		$tagid = $1;
+					#	}
+					/*	my @tag = $dbh->selectrow_array('SELECT id FROM tag WHERE label = ?', { Slice => {} }, $params{'label'} );
+						$tagid = $tag[0];
+						if (!$tagid) {
+							$dbh->do('INSERT INTO tag (label, function) VALUES (?, ?)', undef, $params{'label'}, $params{'function'} );
+							$tagid = $dbh->last_insert_id(undef, undef, 'tag', 'id');
+						} else {
+							$dbh->do('UPDATE tag SET function = ? WHERE id = ?)', undef, $params{'function'}, $tagid );
+						}
+						$output->{'tagid'} = $tagid;*/
+					} else {
+						$output->{'error'} = "incorrect params - label is requried (function optional)";
+					}
+				}
 				when ("tags") {
 					$output->{'tags'} = $dbh->selectcol_arrayref("SELECT label FROM tag");
 				}
@@ -251,7 +283,7 @@ while($client = $server->accept()) {
 			print $client encode_json $output;
 		}
 	} elsif ($path =~ m~^/img/track/(\d+)$~) {
-		my $trackid = $1;
+		my $trackid = 1;
 		$dbh = DBI->connect( "dbi:SQLite:dbname=../db/media.sqlite","", "", { RaiseError => 1, AutoCommit => 0 });
         my $sth = $dbh->prepare('SELECT img FROM track_img WHERE track_id = ?');
         $sth->execute($trackid);
@@ -309,7 +341,7 @@ while($client = $server->accept()) {
 			print $client "HTTP/1.1 404 Not Found\n";
 			print $client "\n";
 			print $client "Not Found\n";
-			print "Not found: $path\n";
+			print STDERR "Not found: $path\n";
 		}
 	}
 	close $client;

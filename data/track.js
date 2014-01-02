@@ -6,6 +6,7 @@
 		$("<button />").text("Add Row").click(addRow).insertAfter('table');
 		$("<button />").text("Cancel").click(function(){ window.close(); }).insertAfter('table');
 		$.loadApi('tags', null, function(data) {existingtags = data.tags; $('.label input').each(function (){ $(this).autocomplete({source: existingtags});});});
+		$("#lists").change(listChange);
 		$(document).keyup(function (e) { 
 				switch (e.keyCode) {
 					case 65: //a 
@@ -76,5 +77,8 @@
 		} ).appendTo(td);
 		if (td.hasClass('label') && existingtags) input.autocomplete({source: existingtags, autofocus: true});
 	}
-
+	function listChange() {
+		alert('change');
+		console.log(this, arguments);
+	}
 };

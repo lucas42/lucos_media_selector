@@ -18,6 +18,9 @@ body.tag {
 button {
 	float: right;
 }
+select {
+	clear: both;
+}
 .error {
 	background: #fcc;
 	color: #900;
