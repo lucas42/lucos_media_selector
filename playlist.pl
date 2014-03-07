@@ -12,6 +12,16 @@ use 5.010;
 local($/) = LF;
 my $port = '8002';
 $| = 1; # Make sure stdout isn't buffered, so output gets seen by service module
+
+my %config;
+open CONFIG, "config" or die "Can't open config file";
+while (my $line = <CONFIG>) {
+     chomp($line);
+     my @parts = split(" ", $line);
+     $config{$parts[0]} = $parts[1];
+}
+close CONFIG;
+
 my $server = new IO::Socket::INET (
 									LocalPort => $port,
 									Proto => 'tcp',
@@ -42,7 +52,7 @@ while($client = $server->accept()) {
 		$writer->xmlDecl('UTF-8');
 		$writer->startTag('playlist');
 
-		$dbh = DBI->connect( "dbi:SQLite:dbname=../db/media.sqlite","", "", { RaiseError => 1, AutoCommit => 0 });
+		$dbh = DBI->connect($config{'dbsource'},$config{'dbusername'}, $config{'dbpassword'}, { RaiseError => 1, AutoCommit => 0 });
 		my @total_weightings = $dbh->selectcol_arrayref('SELECT MAX(cum_weighting) FROM cache');
 		my $total = $total_weightings[0][0];
 		for ($ii = 0; $ii < 20; $ii++) {
@@ -96,7 +106,7 @@ while($client = $server->accept()) {
 						print $client "Content-type: application/xhtml+xml\n";
 						print $client "\n";
 						
-						$dbh = DBI->connect( "dbi:SQLite:dbname=../db/media.sqlite","", "", { RaiseError => 1, AutoCommit => 0 });
+						$dbh = DBI->connect($config{'dbsource'},$config{'dbusername'}, $config{'dbpassword'}, { RaiseError => 1, AutoCommit => 0 });
 						my $tags = $dbh->selectall_arrayref('SELECT label, value, source, tag_id FROM track_tags LEFT JOIN tag ON tag_id = id WHERE track_id = ?', { Slice => {} }, $params{'id'} );
 						my $lists = $dbh->selectall_arrayref('SELECT label, value, tag_id FROM track_tags LEFT JOIN tag ON tag_id = id WHERE function = ?', { Slice => {} }, 'list' );
 						$dbh->disconnect;
@@ -156,7 +166,7 @@ while($client = $server->accept()) {
 					print $client "Content-type: application/xhtml+xml\n";
 					print $client "\n";
 					
-					$dbh = DBI->connect( "dbi:SQLite:dbname=../db/media.sqlite","", "", { RaiseError => 1, AutoCommit => 0 });
+					$dbh = DBI->connect($config{'dbsource'},$config{'dbusername'}, $config{'dbpassword'}, { RaiseError => 1, AutoCommit => 0 });
 					my $tags = $dbh->selectall_arrayref('SELECT id, label, function FROM tag', { Slice => {} });
 					$dbh->disconnect;
 						
@@ -199,7 +209,7 @@ while($client = $server->accept()) {
 			
 		} else {
 			undef $output;
-			$dbh = DBI->connect( "dbi:SQLite:dbname=../db/media.sqlite","", "", { RaiseError => 1, AutoCommit => 0 });
+			$dbh = DBI->connect($config{'dbsource'},$config{'dbusername'}, $config{'dbpassword'}, { RaiseError => 1, AutoCommit => 0 });
 			given ($method) {
 				when ("update") {
 					if ($params{'tag'} && $params{'value'} && $params{'trackid'}) {
@@ -284,7 +294,7 @@ while($client = $server->accept()) {
 		}
 	} elsif ($path =~ m~^/img/track/(\d+)$~) {
 		my $trackid = 1;
-		$dbh = DBI->connect( "dbi:SQLite:dbname=../db/media.sqlite","", "", { RaiseError => 1, AutoCommit => 0 });
+		$dbh = DBI->connect($config{'dbsource'},$config{'dbusername'}, $config{'dbpassword'}, { RaiseError => 1, AutoCommit => 0 });
         my $sth = $dbh->prepare('SELECT img FROM track_img WHERE track_id = ?');
         $sth->execute($trackid);
         my @data = $sth->fetchrow_array();
