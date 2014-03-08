@@ -65,9 +65,15 @@ while($client = $server->accept()) {
 			$writer->dataElement('track_id', $id);
 			$writer->dataElement('url', $url);
 			if ($json) {
-				$data = $coder->decode($json);
-				while (my($key, $val) = each(%{$data})) {
-					$writer->dataElement($key, $val);
+				eval {
+					$data = $coder->decode($json);
+					while (my($key, $val) = each(%{$data})) {
+						$writer->dataElement($key, $val);
+					}
+					1;
+				} or do {
+					my $error = $@;
+					print STDERR "* Error parsing JSON for $url\n$error $json\n\n";
 				}
 			}
 			$writer->endTag('track');
