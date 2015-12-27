@@ -34,6 +34,7 @@ while($client = $server->accept()) {
 	}
 	if ($path eq "/playlist") {
 		print $client "HTTP/1.1 200 Found\n";
+		print $client "Cache-Control: no-cache, no-store, must-revalidate\n";
 		print $client "Content-type: application/xml\n\n";
 		
 		my $xml = '';
